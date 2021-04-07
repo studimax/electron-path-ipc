@@ -1,0 +1,12 @@
+/src/
+/.nyc_output/
+/node_modules/
+/.idea/
+/test/
+
+yarn.lock
+tsconfig.json
+.prettierrc.js
+.mocharc.json
+.eslintrc.js
+.gitignore
