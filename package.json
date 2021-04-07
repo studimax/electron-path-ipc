@@ -56,5 +56,11 @@
   "directories": {
     "test": "test"
   },
-  "repository": "https://github.com/studimax/electron-path-ipc.git"
+  "repository": "https://github.com/studimax/electron-path-ipc.git",
+  "keywords": [
+    "electron",
+    "express",
+    "path",
+    "ipc"
+  ]
 }
