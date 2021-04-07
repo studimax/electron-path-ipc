@@ -12,12 +12,13 @@ $ npm install electron-path-ipc
 $ yarn add electron-path-ipc
 ```
 # Usage
-By default the main process send a request to all renderer process.
+By default, the main process send a request to all renderer process.
 ```js
 // main process
 import {ipcMain} from 'electron-path-ipc';
 ipcMain.on(':identifier/action', (headers,...args)=>{
-    
+    console.log(headers.params); // {identifier: 'my-identifier'}
+    console.log(...args); // ['hello world']
 })
 
 // renderer process
@@ -30,15 +31,16 @@ You can use invoke/handle in both main and renderer process.
 // main process
 import {ipcMain} from 'electron-path-ipc';
 
-ipcMain.handle(':identifier/action', (headers, ...args) => {
-    return 'world'
+ipcMain.handle(':identifier/action', (headers, arg) => {
+    console.log(headers.params); // { identifier: 'my-identifier' }
+    return `${arg} world !`
 })
 
 // renderer process
 import {ipcRenderer} from 'electron-path-ipc';
 
 ipcRenderer.invoke('my-identifier/action', 'hello')
-    .then(console.log)
+    .then(console.log) // 'hello world'
 ```
 
 
