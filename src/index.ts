@@ -6,12 +6,12 @@ import * as uuid from 'uuid';
 type HandleListener = (headers: IpcHeaders, ...args: any[]) => Promise<any> | any;
 type Listener = (headers: IpcHeaders, ...args: any[]) => any;
 type IpcHeaders = {
-  reqId: string;
-  handler?: true;
-  resId?: string;
-  error?: Error;
-  params?: {[key: string]: string};
   [key: string]: any;
+  error?: Error;
+  handler?: true;
+  params: {[key: string]: string};
+  reqId: string;
+  resId?: string;
 };
 
 interface IpcRequest {
@@ -31,8 +31,6 @@ abstract class Ipc extends EventEmitter {
     this.init();
   }
 
-  protected abstract init(): void;
-
   protected onRequest(event: IpcMainEvent | IpcRendererEvent, path: string, headers: IpcHeaders, ...args: any[]) {
     this.eventList.forEach(({regexp}, eventName) => {
       if (regexp.test(path)) {
@@ -42,16 +40,19 @@ abstract class Ipc extends EventEmitter {
       }
     });
 
-    if (headers.handler && !Array.from(this.handlerList.entries())
+    if (
+      headers.handler &&
+      !Array.from(this.handlerList.entries())
         .map(([eventName, {regexp}]) => {
           if (regexp.test(path)) {
-            const result = match<{ [key: string]: string }>(eventName)(path);
+            const result = match<{[key: string]: string}>(eventName)(path);
             headers.params = result ? result.params : {};
             return this.handlerEvent.emit(eventName, headers, ...args);
           }
           return false;
         })
-        .some(t => t)) {
+        .some(t => t)
+    ) {
       this.respond(headers.reqId, path, new Error(`No handler found for '${path}'`));
     }
     if (headers.resId) {
@@ -59,22 +60,24 @@ abstract class Ipc extends EventEmitter {
     }
   }
 
-  public removeListener(path: string, listener: (...args: any[]) => void): this {
-    const entry = this.eventList.get(path);
-    if (entry) {
-      entry.listeners = entry.listeners.filter(l => l !== listener);
-      if (entry.listeners.length <= 0) this.eventList.delete(path);
-    }
-    super.removeListener(path, listener);
-    return this;
+  protected onResponse<T = any>(reqId: string, opts = {timeout: 10000}): Promise<T> {
+    let timeout: NodeJS.Timeout;
+    return new Promise<T>((resolve, reject) => {
+      timeout = setTimeout(() => {
+        this.responseEvent.removeAllListeners(reqId);
+        return reject(new Error(`Timeout for response with reqId '${reqId}'`));
+      }, opts.timeout);
+      this.responseEvent.once(reqId, (header: IpcHeaders, args) =>
+        header.error ? reject(header.error) : resolve(args)
+      );
+    }).finally(() => clearTimeout(timeout));
   }
 
-  public removeAllListeners(path?: string): this {
-    if (path) this.eventList.delete(path);
-    else this.eventList.clear();
-    super.removeAllListeners(path);
-    return this;
+  protected sendRequest(path: string, headers: Partial<IpcHeaders>, ...args: any[]): IpcRequest {
+    return {path, headers: {params: {}, ...headers, reqId: uuid.v4()}, args};
   }
+
+  protected abstract init(): void;
 
   public addListener(path: string, listener: (...args: any[]) => void): this {
     return this.on(path, listener);
@@ -97,6 +100,68 @@ abstract class Ipc extends EventEmitter {
     return this;
   }
 
+  public removeListener(path: string, listener: (...args: any[]) => void): this {
+    const entry = this.eventList.get(path);
+    if (entry) {
+      entry.listeners = entry.listeners.filter(l => l !== listener);
+      if (entry.listeners.length <= 0) this.eventList.delete(path);
+    }
+    super.removeListener(path, listener);
+    return this;
+  }
+
+  public removeAllListeners(path?: string): this {
+    if (path) {
+      this.eventList.delete(path);
+      super.removeAllListeners(path);
+    } else {
+      this.eventList.clear();
+      super.removeAllListeners();
+    }
+    return this;
+  }
+
+  public eventNames(): string[] {
+    return super.eventNames() as string[];
+  }
+
+  public handle(path: string, listener: HandleListener): this {
+    if (this.handlerList.has(path)) throw new Error(`Attempted to register a second handler for '${path}'`);
+    this.handlerList.set(path, {regexp: pathToRegexp(path), listener});
+    this.handlerEvent.on(path, async (headers: IpcHeaders, ...args: any[]) => {
+      const response = await listener(headers, ...args);
+      this.respond(headers.reqId, path, response);
+    });
+    return this;
+  }
+
+  public handleOnce(path: string, listener: HandleListener): this {
+    return this.handle(path, (headers: IpcHeaders, ...args: any[]) => {
+      this.removeHandler(path);
+      return listener(headers, ...args);
+    });
+  }
+
+  public invoke<T = any>(path: string, ...args: any[]): Promise<T> {
+    const req = this.sendRequest(path, {handler: true}, ...args);
+    return this.onResponse(req.headers.reqId);
+  }
+
+  public handlerNames(): string[] {
+    return this.handlerEvent.eventNames() as string[];
+  }
+
+  public removeHandler(path?: string): this {
+    if (path) {
+      this.handlerList.delete(path);
+      this.handlerEvent.removeAllListeners(path);
+    } else {
+      this.handlerList.clear();
+      this.handlerEvent.removeAllListeners();
+    }
+    return this;
+  }
+
   public send(path: string, ...args: any[]): void {
     this.sendRequest(path, {}, ...args);
   }
@@ -105,44 +170,6 @@ abstract class Ipc extends EventEmitter {
   public respond(reqId: string, path: string, ...args: any[]): void {
     const error = args[0] instanceof Error ? args.shift() : undefined;
     this.sendRequest(path, {resId: reqId, error}, ...args);
-  }
-
-  public handle(path: string, listener: HandleListener) {
-    if (this.handlerList.has(path)) throw new Error(`Attempted to register a second handler for '${path}'`);
-    this.handlerList.set(path, {regexp: pathToRegexp(path), listener});
-    this.handlerEvent.on(path, async (headers: IpcHeaders, ...args: any[]) => {
-      const response = await listener(headers, ...args);
-      this.respond(headers.reqId, path, response);
-    });
-  }
-
-  public handleOnce(path: string, listener: HandleListener) {
-    this.handle(path, (headers: IpcHeaders, ...args: any[]) => {
-      this.removeHandler(path);
-      return listener(headers, ...args);
-    });
-  }
-
-  public removeHandler(path?: string): void {
-    if (path) this.handlerList.delete(path);
-    else this.handlerList.clear();
-    this.handlerEvent.removeAllListeners(path);
-  }
-
-  protected onResponse<T = any>(reqId: string): Promise<T> {
-    return new Promise((resolve, reject) =>
-      this.responseEvent.once(reqId, (header, args) => (header.error ? reject(header.error) : resolve(args)))
-    );
-  }
-
-  public invoke<T = any>(path: string, ...args: any[]): Promise<T> {
-    const req = this.sendRequest(path, {handler: true}, ...args);
-    return this.onResponse(req.headers.reqId);
-  }
-
-  protected sendRequest(path: string, headers: Partial<IpcHeaders>, ...args: any[]): IpcRequest {
-    const req: IpcRequest = {path, headers: {...headers, reqId: uuid.v4()}, args};
-    return req;
   }
 }
 
@@ -173,7 +200,7 @@ class IpcRenderer extends Ipc {
     super.onRequest(event, path, headers, ...args);
   }
 
-  public sendRequest(path: string, headers: Partial<IpcHeaders>, ...args: any[]) {
+  protected sendRequest(path: string, headers: Partial<IpcHeaders>, ...args: any[]) {
     const req = super.sendRequest(path, headers, ...args);
     electron.ipcRenderer.send('request', req.path, req.headers, ...req.args);
     return req;

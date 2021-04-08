@@ -18,7 +18,7 @@ By default, the main process send a request to all renderer process.
 import {ipcMain} from 'electron-path-ipc';
 ipcMain.on(':identifier/action', (headers,...args)=>{
     console.log(headers.params); // {identifier: 'my-identifier'}
-    console.log(...args); // ['hello world']
+    console.log(args); // ['hello world']
 })
 
 // renderer process

@@ -5,9 +5,7 @@ module.exports = {
     es2021: true,
     node: true,
   },
-  extends: [
-    './node_modules/gts',
-  ],
+  extends: ['./node_modules/gts'],
   parserOptions: {
     ecmaVersion: 12,
   },
@@ -27,5 +25,16 @@ module.exports = {
     'no-undef': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/explicit-module-boundary-types': 'off',
+    '@typescript-eslint/member-ordering': [
+      'warn',
+      { default: { memberTypes: [
+            "private-field",
+            "protected-field",
+            "public-field",
+            "private-method",
+            "protected-method",
+            "public-method",
+          ] } },
+    ],
   },
 };
