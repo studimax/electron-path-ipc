@@ -1,6 +1,6 @@
 {
   "name": "electron-path-ipc",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Express style path for Electron IPC",
   "author": "StudiMax Ent.",
   "main": "dist/index.js",
