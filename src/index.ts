@@ -121,6 +121,12 @@ abstract class Ipc extends EventEmitter {
     return this;
   }
 
+  public removeAll(): this {
+    this.removeAllListeners();
+    this.removeHandler();
+    return this;
+  }
+
   public eventNames(): string[] {
     return super.eventNames() as string[];
   }
@@ -167,9 +173,14 @@ abstract class Ipc extends EventEmitter {
   }
 
   public respond(reqId: string, path: string, error: Error | undefined, ...args: any[]): void;
+  public respond(reqId: string, path: string, ...args: any[]): void;
   public respond(reqId: string, path: string, ...args: any[]): void {
     const error = args[0] instanceof Error ? args.shift() : undefined;
     this.sendRequest(path, {resId: reqId, error}, ...args);
+  }
+
+  public prefix(prefix: string) {
+    return new PrefixedIpc(this, prefix);
   }
 }
 
@@ -204,6 +215,88 @@ class IpcRenderer extends Ipc {
     const req = super.sendRequest(path, headers, ...args);
     electron.ipcRenderer.send('request', req.path, req.headers, ...req.args);
     return req;
+  }
+}
+
+class PrefixedIpc extends Ipc {
+  private readonly fullPrefix: string;
+  constructor(private readonly parent: Ipc, private readonly prefixPath: string) {
+    super();
+    this.fullPrefix = this.getFullPrefix();
+  }
+
+  protected init(): void {}
+
+  protected getFullPrefix(): string {
+    return this.parent instanceof PrefixedIpc ? this.parent.getFullPrefix() : '' + this.prefixPath;
+  }
+
+  public addListener(path: string, listener: (...args: any[]) => void): this {
+    return this.on(path, listener);
+  }
+
+  public on(path: string, listener: Listener): this {
+    this.parent.on(this.fullPrefix + path, listener);
+    return this;
+  }
+
+  public off(path: string, listener: (...args: any[]) => void): this {
+    return this.removeListener(path, listener);
+  }
+
+  public once(path: string, listener: Listener): this {
+    this.parent.once(this.fullPrefix + path, listener);
+    return this;
+  }
+
+  public removeListener(path: string, listener: (...args: any[]) => void): this {
+    this.parent.removeListener(this.fullPrefix + path, listener);
+    return this;
+  }
+
+  public removeAllListeners(path?: string): this {
+    this.parent.removeAllListeners(this.fullPrefix + path);
+    return this;
+  }
+
+  public removeAll(): this {
+    this.parent.removeAll();
+    return this;
+  }
+
+  public eventNames(): string[] {
+    return this.parent.eventNames();
+  }
+
+  public handle(path: string, listener: HandleListener): this {
+    this.parent.handle(this.fullPrefix + path, listener);
+    return this;
+  }
+
+  public handleOnce(path: string, listener: HandleListener): this {
+    this.parent.handleOnce(this.fullPrefix + path, listener);
+    return this;
+  }
+
+  public invoke<T = any>(path: string, ...args: any[]): Promise<T> {
+    return this.parent.invoke(this.fullPrefix + path, ...args);
+  }
+
+  public handlerNames(): string[] {
+    return this.parent.handlerNames();
+  }
+
+  public removeHandler(path?: string): this {
+    this.parent.removeHandler(this.fullPrefix + path);
+    return this;
+  }
+
+  public send(path: string, ...args: any[]): void {
+    this.parent.send(this.fullPrefix + path, ...args);
+  }
+
+  public respond(reqId: string, path: string, ...args: any[]): void {
+    this.parent.respond(reqId, this.fullPrefix + path, ...args);
   }
 }
 

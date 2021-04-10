@@ -29,15 +29,18 @@ describe('ipc', () => {
         ipcMock.ipcRenderer.send('saveMockWebContentsSend');
     });
     beforeEach(() => {
-        ipcMain
-            .removeAllListeners()
-            .removeHandler();
-
-        ipcRenderer
-            .removeAllListeners()
-            .removeHandler();
+        ipcMain.removeAll()
+        ipcRenderer.removeAll()
     });
     describe('ipcMain', () => {
+
+        it('test ipcMain.prefix', async () => {
+            ipcMain.prefix('test/').prefix('test/').handle('test', (headers, ...args) => {
+                expect(args).to.be.eql(['hello']);
+            });
+            await ipcRenderer.prefix('test/').prefix('test/').invoke('test','hello');
+        });
+
         it('test ipcMain.addListener', () => {
             ipcMain.addListener('test', (headers, ...args) => {
                 expect(args).to.be.eql(['hello']);
@@ -142,6 +145,14 @@ describe('ipc', () => {
         }).timeout(15000);
     });
     describe('ipcRenderer', () => {
+
+        it('test ipcRenderer.prefix', async () => {
+            ipcRenderer.prefix('test/').prefix('test/').handle('test', (headers, ...args) => {
+                expect(args).to.be.eql(['hello']);
+            });
+            await ipcMain.prefix('test/').prefix('test/').invoke('test','hello');
+        });
+
         it('test ipcRenderer.addListener', () => {
             ipcRenderer.addListener('test', (headers, ...args) => {
                 expect(args).to.be.eql(['hello']);

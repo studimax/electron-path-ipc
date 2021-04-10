@@ -43,4 +43,19 @@ ipcRenderer.invoke('my-identifier/action', 'hello')
     .then(console.log) // 'hello world'
 ```
 
+You can use prefix to simplify yours requests
+```js
+// main process
+const prefixedIpc = ipcMain.prefix('test/').prefix('test2/');
+
+prefixedIpc.handle(':identifier/action', (headers, arg) => {
+    return `${arg} world !`
+})
+
+// is the equivalent of
+ipcMain.handle('test/test2/:identifier/action', (headers, arg) => {
+    return `${arg} world !`
+})
+
+```
 
