@@ -20,7 +20,7 @@ interface IpcRequest {
   args: any[];
 }
 
-abstract class Ipc extends EventEmitter {
+abstract class IpcCore extends EventEmitter {
   private readonly eventList = new Map<string, {regexp: RegExp; listeners: Listener[]}>();
   private readonly handlerList = new Map<string, {regexp: RegExp; listener: HandleListener}>();
   private readonly handlerEvent = new EventEmitter();
@@ -179,12 +179,12 @@ abstract class Ipc extends EventEmitter {
     this.sendRequest(path, {resId: reqId, error}, ...args);
   }
 
-  public prefix(prefix: string) {
-    return new PrefixedIpc(this, prefix);
+  public prefix(prefix: string): PrefixedIpc {
+    return new PrefixedIpcCore(this, prefix);
   }
 }
 
-class IpcMain extends Ipc {
+class IpcCoreMain extends IpcCore {
   protected init() {
     electron.ipcMain.on('request', this.onRequest.bind(this));
   }
@@ -202,7 +202,7 @@ class IpcMain extends Ipc {
   }
 }
 
-class IpcRenderer extends Ipc {
+class IpcCoreRenderer extends IpcCore {
   protected init() {
     electron.ipcRenderer.on('request', this.onRequest.bind(this));
   }
@@ -218,25 +218,19 @@ class IpcRenderer extends Ipc {
   }
 }
 
-class PrefixedIpc extends Ipc {
-  private readonly fullPrefix: string;
-  constructor(private readonly parent: Ipc, private readonly prefixPath: string) {
+class PrefixedIpcCore extends IpcCore {
+  constructor(private readonly parent: IpcCore, private readonly prefixPath: string) {
     super();
-    this.fullPrefix = this.getFullPrefix();
   }
 
   protected init(): void {}
-
-  protected getFullPrefix(): string {
-    return this.parent instanceof PrefixedIpc ? this.parent.getFullPrefix() : '' + this.prefixPath;
-  }
 
   public addListener(path: string, listener: (...args: any[]) => void): this {
     return this.on(path, listener);
   }
 
   public on(path: string, listener: Listener): this {
-    this.parent.on(this.fullPrefix + path, listener);
+    this.parent.on(this.prefixPath + path, listener);
     return this;
   }
 
@@ -245,62 +239,79 @@ class PrefixedIpc extends Ipc {
   }
 
   public once(path: string, listener: Listener): this {
-    this.parent.once(this.fullPrefix + path, listener);
+    this.parent.once(this.prefixPath + path, listener);
     return this;
   }
 
   public removeListener(path: string, listener: (...args: any[]) => void): this {
-    this.parent.removeListener(this.fullPrefix + path, listener);
+    this.parent.removeListener(this.prefixPath + path, listener);
     return this;
   }
 
   public removeAllListeners(path?: string): this {
-    this.parent.removeAllListeners(this.fullPrefix + path);
+    if (path) {
+      this.parent.removeAllListeners(this.prefixPath + path);
+    } else {
+      this.eventNames().forEach(event => this.removeAllListeners(event));
+    }
     return this;
   }
 
   public removeAll(): this {
-    this.parent.removeAll();
+    this.removeAllListeners();
+    this.removeHandler();
     return this;
   }
 
   public eventNames(): string[] {
-    return this.parent.eventNames();
+    return this.parent
+      .eventNames()
+      .filter(event => event.startsWith(this.prefixPath))
+      .map(event => event.slice(this.prefixPath.length));
   }
 
   public handle(path: string, listener: HandleListener): this {
-    this.parent.handle(this.fullPrefix + path, listener);
+    this.parent.handle(this.prefixPath + path, listener);
     return this;
   }
 
   public handleOnce(path: string, listener: HandleListener): this {
-    this.parent.handleOnce(this.fullPrefix + path, listener);
+    this.parent.handleOnce(this.prefixPath + path, listener);
     return this;
   }
 
   public invoke<T = any>(path: string, ...args: any[]): Promise<T> {
-    return this.parent.invoke(this.fullPrefix + path, ...args);
+    return this.parent.invoke(this.prefixPath + path, ...args);
   }
 
   public handlerNames(): string[] {
-    return this.parent.handlerNames();
+    return this.parent
+      .handlerNames()
+      .filter(event => event.startsWith(this.prefixPath))
+      .map(event => event.slice(this.prefixPath.length));
   }
 
   public removeHandler(path?: string): this {
-    this.parent.removeHandler(this.fullPrefix + path);
+    if (path) {
+      this.parent.removeHandler(this.prefixPath + path);
+    } else {
+      this.handlerNames().forEach(event => this.removeHandler(event));
+    }
     return this;
   }
 
   public send(path: string, ...args: any[]): void {
-    this.parent.send(this.fullPrefix + path, ...args);
+    this.parent.send(this.prefixPath + path, ...args);
   }
 
   public respond(reqId: string, path: string, ...args: any[]): void {
-    this.parent.respond(reqId, this.fullPrefix + path, ...args);
+    this.parent.respond(reqId, this.prefixPath + path, ...args);
   }
 }
 
-export type IpcMainType = IpcMain;
-export type IpcRendererType = IpcRenderer;
-export const ipcMain = (electron.ipcMain ? new IpcMain() : undefined) as IpcMain;
-export const ipcRenderer = (electron.ipcRenderer ? new IpcRenderer() : undefined) as IpcRenderer;
+export type IpcMain = IpcCoreMain;
+export type IpcRenderer = IpcCoreRenderer;
+export type PrefixedIpc = PrefixedIpcCore;
+
+export const ipcMain:IpcMain = (electron.ipcMain ? new IpcCoreMain() : undefined) as IpcMain;
+export const ipcRenderer:IpcRenderer = (electron.ipcRenderer ? new IpcCoreRenderer() : undefined) as IpcRenderer;

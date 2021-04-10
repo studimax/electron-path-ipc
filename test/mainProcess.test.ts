@@ -1,14 +1,14 @@
 import {assert, expect} from 'chai';
-import {IpcMainEvent, WebContents} from 'electron';
 import createIPCMock from 'electron-mock-ipc';
+import {IpcMain,IpcRenderer} from "../src";
+import {IpcMainEvent, WebContents} from "electron";
 
-import {IpcMainType, IpcRendererType} from '../src';
 
 const proxyquire: any = require('proxyquire');
 const ipcMock = createIPCMock();
 
 const mockWebContents: { webContents: WebContents }[] = [];
-const {ipcMain, ipcRenderer}: { ipcMain: IpcMainType; ipcRenderer: IpcRendererType } = proxyquire('../src/index', {
+const {ipcMain, ipcRenderer}: { ipcMain: IpcMain; ipcRenderer: IpcRenderer } = proxyquire('../src/index', {
     electron: {
         ipcMain: ipcMock.ipcMain,
         ipcRenderer: ipcMock.ipcRenderer,
@@ -39,6 +39,58 @@ describe('ipc', () => {
                 expect(args).to.be.eql(['hello']);
             });
             await ipcRenderer.prefix('test/').prefix('test/').invoke('test','hello');
+        });
+
+        it('test ipcMain.prefix2', () => {
+            ipcMain
+                .on('A',()=>{});
+            const prefix1 = ipcMain.prefix('B/')
+                .on('C',()=>{})
+                .on('D',()=>{});
+            const prefix2 = prefix1.prefix('E/')
+                .on('F',()=>{});
+
+            expect(ipcMain.eventNames()).to.be.eql(['A','B/C','B/D', 'B/E/F']);
+            expect(prefix1.eventNames()).to.be.eql(['C','D', 'E/F']);
+            expect(prefix2.eventNames()).to.be.eql(['F']);
+            prefix2.removeAll();
+            expect(prefix2.eventNames()).to.be.eql([]);
+            expect(prefix1.eventNames()).to.be.eql(['C','D']);
+            expect(ipcMain.eventNames()).to.be.eql(['A','B/C','B/D']);
+            prefix1.removeAll();
+            expect(prefix2.eventNames()).to.be.eql([]);
+            expect(prefix1.eventNames()).to.be.eql([]);
+            expect(ipcMain.eventNames()).to.be.eql(['A']);
+            ipcMain.removeAll();
+            expect(prefix2.eventNames()).to.be.eql([]);
+            expect(prefix1.eventNames()).to.be.eql([]);
+            expect(ipcMain.eventNames()).to.be.eql([]);
+        });
+
+        it('test ipcMain.prefix3', () => {
+            ipcMain
+                .handle('A',()=>{});
+            const prefix1 = ipcMain.prefix('B/')
+                .handle('C',()=>{})
+                .handle('D',()=>{});
+            const prefix2 = prefix1.prefix('E/')
+                .handle('F',()=>{});
+
+            expect(ipcMain.handlerNames()).to.be.eql(['A','B/C','B/D', 'B/E/F']);
+            expect(prefix1.handlerNames()).to.be.eql(['C','D', 'E/F']);
+            expect(prefix2.handlerNames()).to.be.eql(['F']);
+            prefix2.removeAll();
+            expect(prefix2.handlerNames()).to.be.eql([]);
+            expect(prefix1.handlerNames()).to.be.eql(['C','D']);
+            expect(ipcMain.handlerNames()).to.be.eql(['A','B/C','B/D']);
+            prefix1.removeAll();
+            expect(prefix2.handlerNames()).to.be.eql([]);
+            expect(prefix1.handlerNames()).to.be.eql([]);
+            expect(ipcMain.handlerNames()).to.be.eql(['A']);
+            ipcMain.removeAll();
+            expect(prefix2.handlerNames()).to.be.eql([]);
+            expect(prefix1.handlerNames()).to.be.eql([]);
+            expect(ipcMain.handlerNames()).to.be.eql([]);
         });
 
         it('test ipcMain.addListener', () => {
@@ -151,6 +203,58 @@ describe('ipc', () => {
                 expect(args).to.be.eql(['hello']);
             });
             await ipcMain.prefix('test/').prefix('test/').invoke('test','hello');
+        });
+
+        it('test ipcRenderer.prefix2', () => {
+            ipcRenderer
+                .on('A',()=>{});
+            const prefix1 = ipcRenderer.prefix('B/')
+                .on('C',()=>{})
+                .on('D',()=>{});
+            const prefix2 = prefix1.prefix('E/')
+                .on('F',()=>{});
+
+            expect(ipcRenderer.eventNames()).to.be.eql(['A','B/C','B/D', 'B/E/F']);
+            expect(prefix1.eventNames()).to.be.eql(['C','D', 'E/F']);
+            expect(prefix2.eventNames()).to.be.eql(['F']);
+            prefix2.removeAll();
+            expect(prefix2.eventNames()).to.be.eql([]);
+            expect(prefix1.eventNames()).to.be.eql(['C','D']);
+            expect(ipcRenderer.eventNames()).to.be.eql(['A','B/C','B/D']);
+            prefix1.removeAll();
+            expect(prefix2.eventNames()).to.be.eql([]);
+            expect(prefix1.eventNames()).to.be.eql([]);
+            expect(ipcRenderer.eventNames()).to.be.eql(['A']);
+            ipcRenderer.removeAll();
+            expect(prefix2.eventNames()).to.be.eql([]);
+            expect(prefix1.eventNames()).to.be.eql([]);
+            expect(ipcRenderer.eventNames()).to.be.eql([]);
+        });
+
+        it('test ipcRenderer.prefix3', () => {
+            ipcRenderer
+                .handle('A',()=>{});
+            const prefix1 = ipcRenderer.prefix('B/')
+                .handle('C',()=>{})
+                .handle('D',()=>{});
+            const prefix2 = prefix1.prefix('E/')
+                .handle('F',()=>{});
+
+            expect(ipcRenderer.handlerNames()).to.be.eql(['A','B/C','B/D', 'B/E/F']);
+            expect(prefix1.handlerNames()).to.be.eql(['C','D', 'E/F']);
+            expect(prefix2.handlerNames()).to.be.eql(['F']);
+            prefix2.removeAll();
+            expect(prefix2.handlerNames()).to.be.eql([]);
+            expect(prefix1.handlerNames()).to.be.eql(['C','D']);
+            expect(ipcRenderer.handlerNames()).to.be.eql(['A','B/C','B/D']);
+            prefix1.removeAll();
+            expect(prefix2.handlerNames()).to.be.eql([]);
+            expect(prefix1.handlerNames()).to.be.eql([]);
+            expect(ipcRenderer.handlerNames()).to.be.eql(['A']);
+            ipcRenderer.removeAll();
+            expect(prefix2.handlerNames()).to.be.eql([]);
+            expect(prefix1.handlerNames()).to.be.eql([]);
+            expect(ipcRenderer.handlerNames()).to.be.eql([]);
         });
 
         it('test ipcRenderer.addListener', () => {
