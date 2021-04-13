@@ -20,7 +20,43 @@ interface IpcRequest {
   args: any[];
 }
 
-abstract class IpcCore extends EventEmitter {
+export interface Ipc {
+  addListener(path: string, listener: (...args: any[]) => void): this;
+
+  on(path: string, listener: Listener): this;
+
+  off(path: string, listener: (...args: any[]) => void): this;
+
+  once(path: string, listener: Listener): this;
+
+  removeListener(path: string, listener: (...args: any[]) => void): this;
+
+  removeAllListeners(path?: string): this;
+
+  removeAll(): this;
+
+  eventNames(): string[];
+
+  handle(path: string, listener: HandleListener): this;
+
+  handleOnce(path: string, listener: HandleListener): this;
+
+  invoke<T = any>(path: string, ...args: any[]): Promise<T>;
+
+  handlerNames(): string[];
+
+  removeHandler(path?: string): this;
+
+  send(path: string, ...args: any[]): void;
+
+  respond(reqId: string, path: string, error: Error | undefined, ...args: any[]): void;
+  respond(reqId: string, path: string, ...args: any[]): void;
+  respond(reqId: string, path: string, ...args: any[]): void;
+
+  prefix(prefix: string): PrefixedIpc;
+}
+
+abstract class IpcCore extends EventEmitter implements Ipc {
   private readonly eventList = new Map<string, {regexp: RegExp; listeners: Listener[]}>();
   private readonly handlerList = new Map<string, {regexp: RegExp; listener: HandleListener}>();
   private readonly handlerEvent = new EventEmitter();
@@ -218,19 +254,29 @@ class IpcCoreRenderer extends IpcCore {
   }
 }
 
-class PrefixedIpcCore extends IpcCore {
-  constructor(private readonly parent: IpcCore, private readonly prefixPath: string) {
-    super();
+class PrefixedIpcCore implements Ipc {
+  private readonly separator = '/';
+  private readonly regex = /^\/+|\/+$/g;
+  private readonly prefixPath: string;
+  constructor(private readonly parent: Ipc, prefixPath: string) {
+    this.prefixPath = prefixPath.replace(this.regex, '');
   }
 
-  protected init(): void {}
+  private join(...parts: string[]) {
+    if (this.prefixPath) parts = [this.prefixPath, ...parts];
+    return parts.map(v => v.replace(this.regex, '')).join(this.separator);
+  }
+
+  public prefix(prefix: string): PrefixedIpcCore {
+    return new PrefixedIpcCore(this, prefix);
+  }
 
   public addListener(path: string, listener: (...args: any[]) => void): this {
     return this.on(path, listener);
   }
 
   public on(path: string, listener: Listener): this {
-    this.parent.on(this.prefixPath + path, listener);
+    this.parent.on(this.join(path), listener);
     return this;
   }
 
@@ -239,18 +285,18 @@ class PrefixedIpcCore extends IpcCore {
   }
 
   public once(path: string, listener: Listener): this {
-    this.parent.once(this.prefixPath + path, listener);
+    this.parent.once(this.join(path), listener);
     return this;
   }
 
   public removeListener(path: string, listener: (...args: any[]) => void): this {
-    this.parent.removeListener(this.prefixPath + path, listener);
+    this.parent.removeListener(this.join(path), listener);
     return this;
   }
 
   public removeAllListeners(path?: string): this {
     if (path) {
-      this.parent.removeAllListeners(this.prefixPath + path);
+      this.parent.removeAllListeners(this.join(path));
     } else {
       this.eventNames().forEach(event => this.removeAllListeners(event));
     }
@@ -267,33 +313,33 @@ class PrefixedIpcCore extends IpcCore {
     return this.parent
       .eventNames()
       .filter(event => event.startsWith(this.prefixPath))
-      .map(event => event.slice(this.prefixPath.length));
+      .map(event => event.slice(this.prefixPath.length).replace(this.regex, ''));
   }
 
   public handle(path: string, listener: HandleListener): this {
-    this.parent.handle(this.prefixPath + path, listener);
+    this.parent.handle(this.join(path), listener);
     return this;
   }
 
   public handleOnce(path: string, listener: HandleListener): this {
-    this.parent.handleOnce(this.prefixPath + path, listener);
+    this.parent.handleOnce(this.join(path), listener);
     return this;
   }
 
   public invoke<T = any>(path: string, ...args: any[]): Promise<T> {
-    return this.parent.invoke(this.prefixPath + path, ...args);
+    return this.parent.invoke(this.join(path), ...args);
   }
 
   public handlerNames(): string[] {
     return this.parent
       .handlerNames()
       .filter(event => event.startsWith(this.prefixPath))
-      .map(event => event.slice(this.prefixPath.length));
+      .map(event => event.slice(this.prefixPath.length).replace(this.regex, ''));
   }
 
   public removeHandler(path?: string): this {
     if (path) {
-      this.parent.removeHandler(this.prefixPath + path);
+      this.parent.removeHandler(this.join(path));
     } else {
       this.handlerNames().forEach(event => this.removeHandler(event));
     }
@@ -301,11 +347,11 @@ class PrefixedIpcCore extends IpcCore {
   }
 
   public send(path: string, ...args: any[]): void {
-    this.parent.send(this.prefixPath + path, ...args);
+    this.parent.send(this.join(path), ...args);
   }
 
   public respond(reqId: string, path: string, ...args: any[]): void {
-    this.parent.respond(reqId, this.prefixPath + path, ...args);
+    this.parent.respond(reqId, this.join(path), ...args);
   }
 }
 
@@ -313,5 +359,5 @@ export type IpcMain = IpcCoreMain;
 export type IpcRenderer = IpcCoreRenderer;
 export type PrefixedIpc = PrefixedIpcCore;
 
-export const ipcMain:IpcMain = (electron.ipcMain ? new IpcCoreMain() : undefined) as IpcMain;
-export const ipcRenderer:IpcRenderer = (electron.ipcRenderer ? new IpcCoreRenderer() : undefined) as IpcRenderer;
+export const ipcMain: IpcMain = (electron.ipcMain ? new IpcCoreMain() : undefined) as IpcMain;
+export const ipcRenderer: IpcRenderer = (electron.ipcRenderer ? new IpcCoreRenderer() : undefined) as IpcRenderer;

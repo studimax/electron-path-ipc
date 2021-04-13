@@ -44,10 +44,10 @@ describe('ipc', () => {
         it('test ipcMain.prefix2', () => {
             ipcMain
                 .on('A',()=>{});
-            const prefix1 = ipcMain.prefix('B/')
+            const prefix1 = ipcMain.prefix('B')
                 .on('C',()=>{})
                 .on('D',()=>{});
-            const prefix2 = prefix1.prefix('E/')
+            const prefix2 = prefix1.prefix('E')
                 .on('F',()=>{});
 
             expect(ipcMain.eventNames()).to.be.eql(['A','B/C','B/D', 'B/E/F']);
