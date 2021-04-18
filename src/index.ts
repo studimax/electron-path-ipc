@@ -171,8 +171,12 @@ abstract class IpcCore extends EventEmitter implements Ipc {
     if (this.handlerList.has(path)) throw new Error(`Attempted to register a second handler for '${path}'`);
     this.handlerList.set(path, {regexp: pathToRegexp(path), listener});
     this.handlerEvent.on(path, async (headers: IpcHeaders, ...args: any[]) => {
-      const response = await listener(headers, ...args);
-      this.respond(headers.reqId, path, response);
+      try {
+        const response = await listener(headers, ...args);
+        this.respond(headers.reqId, path, response);
+      }catch (e) {
+        this.respond(headers.reqId, path,new Error(e?.message??e?.toString()??''));
+      }
     });
     return this;
   }

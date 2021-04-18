@@ -160,6 +160,18 @@ describe('ipc', () => {
             expect(await ipcRenderer.invoke('test', 'hello')).to.be.equal('hello world');
         });
 
+        it('test ipcMain.handle Error', async () => {
+            ipcMain.handle('test', async (headers, args) => {
+                throw 'throw error';
+            });
+            try {
+                await ipcRenderer.invoke('test', 'hello');
+            } catch (e) {
+                return assert.equal(e, "Error: throw error");
+            }
+            assert.fail('invoke must throw');
+        });
+
         it('test ipcMain.invoke no handler', async () => {
             try {
                 await ipcMain.invoke('test', 'hello');
