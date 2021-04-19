@@ -61,6 +61,10 @@ abstract class IpcCore extends EventEmitter implements Ipc {
   private readonly handlerList = new Map<string, {regexp: RegExp; listener: HandleListener}>();
   private readonly handlerEvent = new EventEmitter();
   private readonly responseEvent = new EventEmitter();
+  private handlerTry: {[key: string]: number} = {};
+  protected get nbTry(): number {
+    return 1;
+  }
 
   constructor() {
     super();
@@ -83,13 +87,19 @@ abstract class IpcCore extends EventEmitter implements Ipc {
           if (regexp.test(path)) {
             const result = match<{[key: string]: string}>(eventName)(path);
             headers.params = result ? result.params : {};
+            delete this.handlerTry[headers.reqId];
             return this.handlerEvent.emit(eventName, headers, ...args);
           }
           return false;
         })
         .some(t => t)
     ) {
-      this.respond(headers.reqId, path, new Error(`No handler found for '${path}'`));
+      //todo delete if no try in delay
+      this.handlerTry[headers.reqId] ??= 0;
+      if (++this.handlerTry[headers.reqId] >= this.nbTry) {
+        delete this.handlerTry[headers.reqId];
+        this.respond(headers.reqId, path, new Error(`No handler found for '${path}'`));
+      }
     }
     if (headers.resId) {
       this.responseEvent.emit(headers.resId, headers, ...args);
@@ -174,8 +184,8 @@ abstract class IpcCore extends EventEmitter implements Ipc {
       try {
         const response = await listener(headers, ...args);
         this.respond(headers.reqId, path, response);
-      }catch (e) {
-        this.respond(headers.reqId, path,new Error(e?.message??e?.toString()??''));
+      } catch (e) {
+        this.respond(headers.reqId, path, new Error(e?.message ?? e?.toString() ?? ''));
       }
     });
     return this;
@@ -231,6 +241,10 @@ class IpcCoreMain extends IpcCore {
 
   protected onRequest(event: IpcMainEvent, path: string, headers: IpcHeaders, ...args: any[]) {
     super.onRequest(event, path, headers, ...args);
+  }
+
+  protected get nbTry(): number {
+    return electron.BrowserWindow.getAllWindows().length;
   }
 
   protected sendRequest(path: string, headers: Partial<IpcHeaders>, ...args: any[]) {
