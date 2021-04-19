@@ -62,7 +62,7 @@ abstract class IpcCore extends EventEmitter implements Ipc {
   private readonly handlerEvent = new EventEmitter();
   private readonly responseEvent = new EventEmitter();
   private handlerTry: {[key: string]: number} = {};
-  protected get nbTry(): number {
+  protected get maxTry(): number {
     return 1;
   }
 
@@ -87,19 +87,13 @@ abstract class IpcCore extends EventEmitter implements Ipc {
           if (regexp.test(path)) {
             const result = match<{[key: string]: string}>(eventName)(path);
             headers.params = result ? result.params : {};
-            delete this.handlerTry[headers.reqId];
             return this.handlerEvent.emit(eventName, headers, ...args);
           }
           return false;
         })
         .some(t => t)
     ) {
-      //todo delete if no try in delay
-      this.handlerTry[headers.reqId] ??= 0;
-      if (++this.handlerTry[headers.reqId] >= this.nbTry) {
-        delete this.handlerTry[headers.reqId];
-        this.respond(headers.reqId, path, new Error(`No handler found for '${path}'`));
-      }
+      this.respond(headers.reqId, path, new Error(`No handler found for '${path}'`));
     }
     if (headers.resId) {
       this.responseEvent.emit(headers.resId, headers, ...args);
@@ -110,13 +104,19 @@ abstract class IpcCore extends EventEmitter implements Ipc {
     let timeout: NodeJS.Timeout;
     return new Promise<T>((resolve, reject) => {
       timeout = setTimeout(() => {
-        this.responseEvent.removeAllListeners(reqId);
         return reject(new Error(`Timeout for response with reqId '${reqId}'`));
       }, opts.timeout);
-      this.responseEvent.once(reqId, (header: IpcHeaders, args) =>
-        header.error ? reject(header.error) : resolve(args)
-      );
-    }).finally(() => clearTimeout(timeout));
+      let nbTry = this.maxTry;
+      this.responseEvent.on(reqId, (header: IpcHeaders, args) => {
+        if (!header.error) return resolve(args);
+        else if (--nbTry <= 0) {
+          return reject(header.error);
+        }
+      });
+    }).finally(() => {
+      this.responseEvent.removeAllListeners(reqId);
+      clearTimeout(timeout);
+    });
   }
 
   protected sendRequest(path: string, headers: Partial<IpcHeaders>, ...args: any[]): IpcRequest {
@@ -243,7 +243,7 @@ class IpcCoreMain extends IpcCore {
     super.onRequest(event, path, headers, ...args);
   }
 
-  protected get nbTry(): number {
+  protected get maxTry(): number {
     return electron.BrowserWindow.getAllWindows().length;
   }
 
